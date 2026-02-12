@@ -9,6 +9,12 @@
 #include "esp_log.h" // log functions for debugging
 #include <math.h> // Required for rand()
 
+// WiFi and MQTT
+#include "mqtt_client.h"
+#include "esp_wifi.h"
+#include "esp_event.h"
+#include "nvs_flash.h"
+
 // --- LEDS ----
 #define RED_LED             18
 #define GREEN_LED           19
@@ -48,6 +54,25 @@ uint32_t us_to_duty(int us) {
   return (us * MAX_DUTY_RES) / 20000; // 20000us = 20ms period (50Hz)
 }
 
+// Handles the connection "handshake"
+static esp_mqtt_client_handle_t mqtt_client;
+
+static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data) {
+    esp_mqtt_event_handle_t event = event_data;
+    switch ((esp_mqtt_event_id_t)event_id) {
+        case MQTT_EVENT_CONNECTED:
+            ESP_LOGI(TAG, "Connected to LocalStack MQTT!");
+            // Subscribe to a command topic so we can stop the motor from the cloud
+            esp_mqtt_client_subscribe(mqtt_client, "device/commands", 0);
+            break;
+        case MQTT_EVENT_DATA:
+            ESP_LOGI(TAG, "Message received: %.*s", event->data_len, event->data);
+            // Logic to parse "STOP" or "START" would go here
+            break;
+        default:
+            break;
+    }
+}
 
 void app_main(void)
 {
@@ -180,11 +205,10 @@ void app_main(void)
     // --- TELEMETRY LOGGING ---
     static int log_counter = 0;
     if (log_counter++ > 25) {
-      // 1. Create a buffer for our JSON string
+      // Create a buffer for our JSON string
       char telemetry_payload[128];
 
-      // 2. Format the data into a clean JSON object
-      // This is the "Industry Standard" way to move IoT data
+      // Format the data into a clean JSON object
       snprintf(telemetry_payload, sizeof(telemetry_payload),
                "{\"status\":\"%s\",\"temp\":%.2f,\"current\":%.2f,\"speed\":%d}",
                is_running ? "RUNNING" : "STOPPED",
@@ -192,12 +216,14 @@ void app_main(void)
                sim_current,
                is_running ? step_size : 0);
 
-      // 3. Print the payload (Since printf is our reliable friend)
-      printf("TELEMETRY_JSON: %s\n", telemetry_payload);
-
-
+      // PUBLISH TO LOCALSTACK
+      if (mqtt_client != NULL) {
+          esp_mqtt_client_publish(mqtt_client, "device/telemetry", telemetry_payload, 0, 1, 0);
+      }
+      
       log_counter = 0;
     }
+
     if (sim_temp >= 34.0f && sim_current >= 1.70f){
       gpio_set_level(RED_LED, 1);
       gpio_set_level(GREEN_LED, 0);
@@ -206,6 +232,7 @@ void app_main(void)
       is_running = false;
       fault_critical = true;
     }
+
     vTaskDelay(pdMS_TO_TICKS(20));
   }
 }
