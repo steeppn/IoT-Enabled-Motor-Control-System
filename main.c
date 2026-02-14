@@ -4,6 +4,7 @@
 #include <string.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/event_groups.h"
 #include "driver/gpio.h"
 #include "driver/ledc.h"
 #include "esp_adc/adc_oneshot.h"
@@ -15,6 +16,9 @@
 #include "esp_wifi.h"
 #include "esp_event.h"
 #include "mqtt_client.h"
+
+#define WIFI_CONNECTED_BIT BIT0
+static EventGroupHandle_t s_wifi_event_group;
 
 static const char *TAG = "IOT_SWEEP_SYSTEM";
 
@@ -38,8 +42,8 @@ static const char *TAG = "IOT_SWEEP_SYSTEM";
 // --- NETWORK CONFIG ---
 #define WOKWI_SSID "Wokwi-GUEST"
 #define WOKWI_PASS ""
-// 10.0.2.2 is the special IP that points to your PC from Wokwi
-#define LOCALSTACK_URL "mqtt://10.0.2.2:1883"
+// Use public MQTT broker for testing
+#define LOCALSTACK_URL "mqtt://test.mosquitto.org:1883"
 
 // --- GLOBALS ---
 static esp_mqtt_client_handle_t mqtt_client = NULL;
@@ -71,8 +75,20 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     }
 }
 
+static void wifi_event_handler(void* arg, esp_event_base_t event_base,
+                             int32_t event_id, void* event_data) {
+    if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
+        esp_wifi_connect();
+    } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
+        ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
+        ESP_LOGI(TAG, "Got IP: " IPSTR, IP2STR(&event->ip_info.ip));
+        xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT); // Signal success!
+    }
+}
+
 // --- WIFI INITIALIZATION ---
 void wifi_init(void) {
+    s_wifi_event_group = xEventGroupCreate();
     ESP_ERROR_CHECK(nvs_flash_init());
     esp_netif_init();
     esp_event_loop_create_default();
@@ -80,6 +96,9 @@ void wifi_init(void) {
 
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     esp_wifi_init(&cfg);
+
+    esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, NULL, NULL);
+    esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &wifi_event_handler, NULL, NULL);
 
     wifi_config_t wifi_config = {
         .sta = {
@@ -107,6 +126,10 @@ void app_main(void)
 {
     // 1. SYSTEM INIT
     wifi_init();
+
+    ESP_LOGI(TAG, "Waiting for WiFi...");
+    xEventGroupWaitBits(s_wifi_event_group, WIFI_CONNECTED_BIT, pdFALSE, pdTRUE, portMAX_DELAY);
+
     mqtt_app_start();
 
     // 2. HARDWARE SETUP (LEDs, Buttons, ADC, PWM)
@@ -189,7 +212,7 @@ void app_main(void)
                      is_running ? "RUNNING" : "STOPPED", sim_temp, sim_current, is_running ? step_size : 0);
 
             if (mqtt_client != NULL) {
-                esp_mqtt_client_publish(mqtt_client, "device/telemetry", payload, 0, 1, 0);
+                esp_mqtt_client_publish(mqtt_client, "eras_esp32/telemetry", payload, 0, 1, 0);
                 ESP_LOGI(TAG, "Published: %s", payload);
             }
             log_counter = 0;
