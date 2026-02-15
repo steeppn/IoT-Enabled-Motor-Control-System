@@ -1,0 +1,7 @@
+# Ignore additional log files
+*.log
+# Ignore Lambda deployment packages
+*.zip
+# Ignore Python build artifacts
+__pycache__/
+*.pyc

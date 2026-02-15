@@ -208,8 +208,8 @@ void app_main(void)
         if (log_counter++ > 50) { // Publish roughly every 1 second
             char payload[128];
             snprintf(payload, sizeof(payload),
-                     "{\"status\":\"%s\",\"temp\":%.2f,\"current\":%.2f,\"speed\":%d}",
-                     is_running ? "RUNNING" : "STOPPED", sim_temp, sim_current, is_running ? step_size : 0);
+                     "{\"status\":\"%s\",\"temp\":%.2f,\"current\":%.2f,\"speed\":%d,\"faulted\":%d}",
+                     is_running ? "RUNNING" : "STOPPED", sim_temp, sim_current, is_running ? step_size : 0, fault_critical ? 1 : 0);
 
             if (mqtt_client != NULL) {
                 esp_mqtt_client_publish(mqtt_client, "eras_esp32/telemetry", payload, 0, 1, 0);
