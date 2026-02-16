@@ -8,54 +8,6 @@ This system simulates a real IoT deployment where an ESP32 microcontroller monit
 
 The whole thing runs locally using LocalStack, so there's no cloud costs while developing and testing. Everything is automated through a single launcher script.
 
-## System Architecture
-```mermaid
-graph LR
-    A[ESP32 Device<br/>192.168.10.100] -->|MQTT Publish<br/>Port 1883| B[MQTT Broker<br/>Mosquitto]
-    B -->|Subscribe| C[Python Bridge<br/>mqtt_to_lambda.py]
-    C -->|Invoke| D[AWS Lambda<br/>ProcessTelemetry]
-    D -->|PutItem| E[(DynamoDB<br/>DeviceTelemetry)]
-    E -->|Scan Query| F[Streamlit Dashboard<br/>Port 8501]
-    
-    style A fill:#0288d1,stroke:#01579b,color:#fff
-    style B fill:#ff6f00,stroke:#e65100,color:#fff
-    style C fill:#ffa726,stroke:#f57c00,color:#fff
-    style D fill:#4caf50,stroke:#2e7d32,color:#fff
-    style E fill:#9c27b0,stroke:#6a1b9a,color:#fff
-    style F fill:#e91e63,stroke:#c2185b,color:#fff
-```
-
-## Network Topology Table 
-
-### Network Segmentation
-
-| VLAN | Segment | Network | Purpose | Devices | Security |
-|------|---------|---------|---------|---------|----------|
-| **VLAN 10** | IoT Device Zone | 192.168.10.0/24 | Field devices, sensors | ESP32 (192.168.10.100)<br/>WAP (192.168.10.1) | • Isolated from backend<br/>• No internet access<br/>• Firewalled |
-| **VLAN 20** | DMZ | 192.168.20.0/24 | Message broker services | MQTT Broker (192.168.20.10) | • Public-facing services<br/>• ACL restrictions<br/>• Traffic inspection |
-| **VLAN 30** | Secure Backend | 192.168.30.0/24 | Compute & storage | Lambda (192.168.30.20)<br/>DynamoDB (192.168.30.30) | • No direct device access<br/>• Private subnet<br/>• IAM policies |
-| **VLAN 99** | Management | 192.168.99.0/24 | Admin & monitoring | Dashboard (192.168.99.50) | • Admin access only<br/>• Separate from production<br/>• Audit logging |
-
-### Firewall Rules (ACLs)
-
-```
-VLAN 10 → VLAN 20:  PERMIT tcp port 1883 (MQTT only)
-VLAN 20 → VLAN 30:  PERMIT tcp port 4566 (Lambda invoke only)
-VLAN 30 → VLAN 30:  PERMIT all (internal backend)
-VLAN 99 → ANY:      PERMIT all (management)
-ANY → VLAN 10:      DENY all (no inbound to IoT)
-```
-
-### Port Mapping
-
-| Service | Port | Protocol | Access |
-|---------|------|----------|--------|
-| MQTT Broker | 1883 | TCP | VLAN 10 → VLAN 20 |
-| LocalStack Lambda | 4566 | TCP | VLAN 20 → VLAN 30 |
-| Streamlit Dashboard | 8501 | HTTP | VLAN 99 only |
-| SSH Management | 22 | TCP | VLAN 99 only |
-
----
 
 ## Architecture Overview
 ```
@@ -125,9 +77,6 @@ The MQTT broker is currently public (test.mosquitto.org) or unauthenticated loca
 **Safety as Security:**
 The fault detection system demonstrates defense-in-depth principles. Multiple layers prevent dangerous operation: threshold monitoring (detection), automatic shutdown (prevention), safety interlocks (access control), and persistent logging (accountability). This parallels how security systems use layered controls to protect against threats.
 
-**Security Considerations:**
-The MQTT broker is currently public (test.mosquitto.org) which is fine for development but wouldn't fly in production. In a real deployment, you'd use AWS IoT Core with certificate-based authentication, TLS encryption, and IAM policies. The Lambda function would also need proper VPC configuration and CloudWatch logging for audit trails.
-
 ### AWS Cloud Practitioner
 
 **What I Applied:**
@@ -153,7 +102,7 @@ Even though this runs on LocalStack, the code is identical to what would run on 
 The Lambda function only stores temperature readings if they've changed by more than 0.5 degrees from the last reading. This reduces database writes and storage costs. In a real production system with thousands of devices, this kind of filtering can save significant money.
 
 ### Automatic Data Cleanup
-DynamoDB TTL automatically deletes records older than 7 days. Each record gets a timestamp when it's created, and DynamoDB handles the cleanup in the background. This prevents the database from growing indefinitely.
+DynamoDB TTL automatically deletes records older than 3 days. Each record gets a timestamp when it's created, and DynamoDB handles the cleanup in the background. This prevents the database from growing indefinitely.
 
 ### Real-Time Dashboard
 Streamlit auto-refreshes every 2 seconds and shows:
@@ -297,10 +246,10 @@ Containerizing LocalStack and Mosquitto makes the setup reproducible across diff
 
 If I continue developing this:
 
-- Add AWS IoT Core tintegration for production MQTT with TLS
+- Add AWS IoT Core integration for production MQTT with TLS
 - Implement SNS notifications for fault conditions
 - Add more ESP32 devices and demonstrate multi-device aggregation
-- Create CloudWatch dashboards for operaional metrics
+- Create CloudWatch dashboards for operational metrics
 - Add API Gateway + Lambda for mobile app integration
 - Implement Cognito authentication for the dashboard
 - Set up CI/CD pipeline with GitHub Actions
