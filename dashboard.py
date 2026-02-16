@@ -16,8 +16,7 @@ TABLE_NAME = "DeviceTelemetry"
 st.set_page_config(page_title="IoT Sweep Dashboard", layout="wide")
 
 # --- AUTO REFRESH ---
-# This pings the server every 2000ms (2 seconds)
-# It handles the "context" automatically so the warning goes away!
+# Pings the server every 
 st_autorefresh(interval=2000, key="datarefresh")
 
 st.title("ERAS-ESP32 Real-Time Telemetry")
@@ -37,7 +36,7 @@ def fetch_data():
 df = fetch_data()
 
 if not df.empty and 'temp' in df.columns:
-    # Data Cleaning (important for Plotly)
+    # Data Cleaning 
     df['temp'] = df['temp'].apply(float)
     if 'current' in df.columns:
         df['current'] = df['current'].apply(float)
