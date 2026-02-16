@@ -31,6 +31,13 @@ def lambda_handler(event, context):
     device_id = payload.get('device_id', 'esp32-001')
     new_temp = payload.get('temp')
 
+    # Require temperature 
+    if new_temp is None:
+        return {'statusCode': 400, 'body': 'Missing required field: temp'}
+    # Validate temperature if present
+    if not isinstance(payload.get('temp'), (int, float, Decimal)):
+        return {'statusCode': 400, 'body': 'Invalid temperature format'}
+
     # FILTERING (Only save if change is > 0.5)
     response = table.query(
         KeyConditionExpression=Key('device_id').eq(device_id),
