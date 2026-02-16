@@ -60,7 +60,7 @@ if not df.empty and 'temp' in df.columns:
 
     status = latest.get('status', 'Unknown')
     faulted = int(latest.get('faulted', 0))
-    if faulted == 1:
+    if faulted >= 1:
         col3.metric("Status", "FAULT", delta="Critical", delta_color="red", delta_arrow="off")
     elif status == 'RUNNING':
         col3.metric("Status", "RUNNING")
