@@ -1,7 +1,5 @@
 # IoT-Enabled Motor Control System and Telemetry System with AWS LocalStack
 
-A complete end-to-end IoT data pipeline that simulates an ESP32 device with motor control and safety interlocks sending real-time telemetry through MQTT, processes it with AWS Lambda, stores it in DynamoDB, and visualizes everything on a live Streamlit dashboard. Built entirely on LocalStack for local AWS development.
-
 ## What This Project Does
 
 This system simulates a real IoT deployment where an ESP32 microcontroller monitors temperature and current draw from a servo motor sweep system. The device publishes telemetry data over MQTT to a public broker, which then gets processed through AWS serverless infrastructure before being displayed on a web dashboard.
